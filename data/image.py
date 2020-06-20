@@ -22,7 +22,7 @@ weight = []
 np.random.seed(1)
 for i in range(block):
     weight.append(np.random.uniform(-1, 1))
-print('Weight is:',weight)
+print('Weight is:',weight,'\n')
 
 b = []
 
@@ -65,9 +65,9 @@ print(b)
 # a = np.asarray(a)
 # print(a,'\n')
 
-rank = np.linalg.matrix_rank(b)
+# rank = np.linalg.matrix_rank(b)
 
-print(rank)
+# print(rank)
 
 # (P, L, U) = la.lu(a)
 # D = np.diag(np.diag(U))
