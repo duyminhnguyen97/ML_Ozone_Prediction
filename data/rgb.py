@@ -10,48 +10,49 @@ start_time = time.time()
 
 # Get all file names in images folder
 curr_path = path.dirname(__file__)
-name_list = listdir(curr_path + '\images')
+name_list = listdir(path.join(curr_path, 'images'))
 name_list.remove('.gitignore') # Remove .gitignore file
 
 # Resize dimension
-horizontal = 2048
-vertical = 1024
+horizontal = 1024
+vertical = 512
 ncomp = len(name_list)
 
-img_gray = []
+r = []
 
 # Main
 for i in range(len(name_list)):
     # Get img RGB
     file_path = path.join(curr_path, 'images', name_list[i])
     img = cv2.imread(file_path)
-    #print(img.shape)
+    # print(img.shape)
     img = cv2.resize(img, (horizontal, vertical))
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    #img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     img = np.asarray(img)
     img = img.astype(np.float64)
-
+    img = img.flatten()
+    r.append(img)
     # plt.imshow(img, cmap="gray")
     # plt.show()
 
-    img = img.flatten()
-    img_gray.append(img)
+r = np.asarray(r)
+print(r)
+print(r.shape)
 
-img_gray = np.asarray(img_gray)
-print(img_gray.shape)
 
 pca_X = PCA(ncomp)
 
 # X_proj has np columns with main components
-X_proj = pca_X.fit_transform(img_gray)
+X_proj = pca_X.fit_transform(r)
 print(X_proj.shape)
 
 X_inv_proj = pca_X.inverse_transform(X_proj) #reshaping
 print(X_inv_proj.shape)
 print(np.cumsum(pca_X.explained_variance_ratio_))
+
 for i in range(X_inv_proj.shape[0]):
-    img_new = X_inv_proj[i].reshape(vertical, horizontal)
-    cv2.imwrite(path.join(curr_path, 'reconstructed_img', name_list[i]), img_new)
+    img_new = X_inv_proj[i].reshape(vertical, horizontal,3)
+    cv2.imwrite(path.join(curr_path, 'reconstructed_rgb', name_list[i]), img_new)
 
 # for i in range(X_inv_proj.shape[0]):
 #     img_inv = X_inv_proj[i].reshape(vertical, horizontal)
