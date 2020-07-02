@@ -1,6 +1,7 @@
 import time
 import cv2
 import numpy as np
+import pickle as pk
 from os import listdir, path
 from matplotlib import pyplot as plt
 from sklearn.decomposition import PCA
@@ -49,9 +50,14 @@ print(X_proj.shape)
 X_inv_proj = pca_X.inverse_transform(X_proj) #reshaping
 print(X_inv_proj.shape)
 print(np.cumsum(pca_X.explained_variance_ratio_))
+
 for i in range(X_inv_proj.shape[0]):
     img_new = X_inv_proj[i].reshape(vertical, horizontal)
     cv2.imwrite(path.join(curr_path, 'reconstructed_img', name_list[i]), img_new)
+
+pkl_filename = path.join(curr_path, 'models', 'model_gray.pkl')
+with open(pkl_filename, 'wb') as file:
+    pk.dump(pca_X, file, protocol=4)
 
 # for i in range(X_inv_proj.shape[0]):
 #     img_inv = X_inv_proj[i].reshape(vertical, horizontal)
