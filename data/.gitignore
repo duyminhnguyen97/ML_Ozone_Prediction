@@ -1,3 +1,5 @@
 autoencoded_img/*
 images/*
 temp.py
+test.py
+pca.npy
