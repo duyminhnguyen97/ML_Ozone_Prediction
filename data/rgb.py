@@ -1,67 +1,85 @@
 import time
 import cv2
 import numpy as np
-import pickle as pk
 from os import listdir, path
-from matplotlib import pyplot as plt
-from sklearn.decomposition import PCA
 
 # Timer
 start_time = time.time()
 
 # Get all file names in images folder
-curr_path = path.dirname(__file__)
-name_list = listdir(path.join(curr_path, 'images'))
-name_list.remove('.gitignore') # Remove .gitignore file
+curr_dir = path.dirname(__file__)
+name_list = listdir(path.join(curr_dir, 'images'))
+name_list.remove('.gitignore')  # Remove .gitignore file
 
 # Resize dimension
-horizontal = 1024
-vertical = 512
-ncomp = len(name_list)
-
-r = []
+horizontal = 512
+vertical = 256
 
 # Main
+north_R = []
+north_G = []
+north_B = []
+
+south_R = []
+south_G = []
+south_B = []
+
 for i in range(len(name_list)):
     # Get img RGB
-    file_path = path.join(curr_path, 'images', name_list[i])
+    file_path = path.join(curr_dir, 'images', name_list[i])
     img = cv2.imread(file_path)
-    # print(img.shape)
+    #print(img.shape)
     img = cv2.resize(img, (horizontal, vertical))
-    #img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     img = np.asarray(img)
-    img = img.astype(np.float64)
-    img = img.flatten()
-    r.append(img)
+    img = img.astype(np.float32)
+
     # plt.imshow(img, cmap="gray")
     # plt.show()
 
-r = np.asarray(r)
-print(r)
-print(r.shape)
+    img = np.asarray(img)
+    north = img[0:int(vertical/4),] / 255
+    south = img[int(vertical - vertical/4):int(vertical),] / 255
 
+    cv2.imwrite(path.join(curr_dir, 'reconstructed_rgb', 'north', name_list[i]), cv2.cvtColor(north * 255, cv2.COLOR_BGR2RGB))
+    cv2.imwrite(path.join(curr_dir, 'reconstructed_rgb', 'south', name_list[i]), cv2.cvtColor(south * 255, cv2.COLOR_BGR2RGB))
 
-pca_X = PCA(ncomp)
+    nR = north[:,:,0]
+    nG = north[:,:,1]
+    nB = north[:,:,2]
 
-# X_proj has np columns with main components
-X_proj = pca_X.fit_transform(r)
-print(X_proj.shape)
+    sR = south[:,:,0]
+    sG = south[:,:,1]
+    sB = south[:,:,2]
 
-X_inv_proj = pca_X.inverse_transform(X_proj) #reshaping
-print(X_inv_proj.shape)
-print(np.cumsum(pca_X.explained_variance_ratio_))
+    north_R.append(nR.flatten())
+    north_G.append(nG.flatten())
+    north_B.append(nB.flatten())
 
-for i in range(X_inv_proj.shape[0]):
-    img_new = X_inv_proj[i].reshape(vertical, horizontal,3)
-    cv2.imwrite(path.join(curr_path, 'reconstructed_rgb', name_list[i]), img_new)
+    south_R.append(sR.flatten())
+    south_G.append(sG.flatten())
+    south_B.append(sB.flatten())
 
-pkl_filename = path.join(curr_path, 'models', 'model_rgb.pkl')
-with open(pkl_filename, 'wb') as file:
-    pk.dump(pca_X, file, protocol=4)
+north_R = np.asarray(north_R).transpose()
+print(north_R.shape)
+north_G = np.asarray(north_G).transpose()
+print(north_G.shape)
+north_B = np.asarray(north_B).transpose()
+print(north_B.shape)
 
-# for i in range(X_inv_proj.shape[0]):
-#     img_inv = X_inv_proj[i].reshape(vertical, horizontal)
-#     plt.imshow(img_inv, cmap="gray")
-#     plt.show()
+south_R = np.asarray(south_R).transpose()
+print(south_R.shape)
+south_G = np.asarray(south_G).transpose()
+print(south_G.shape)
+south_B = np.asarray(south_B).transpose()
+print(south_B.shape)
+
+np.save(path.join(curr_dir, 'reconstructed_rgb', 'north', 'R'), north_R)
+np.save(path.join(curr_dir, 'reconstructed_rgb', 'north', 'G'), north_G)
+np.save(path.join(curr_dir, 'reconstructed_rgb', 'north', 'B'), north_B)
+
+np.save(path.join(curr_dir, 'reconstructed_rgb', 'south', 'R'), south_R)
+np.save(path.join(curr_dir, 'reconstructed_rgb', 'south', 'G'), south_G)
+np.save(path.join(curr_dir, 'reconstructed_rgb', 'south', 'B'), south_B)
 
 print('Time: %s seconds.' % (time.time() - start_time))

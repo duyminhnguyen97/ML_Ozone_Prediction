@@ -1,5 +1,6 @@
-autoencoded_img/*
 images/*
 temp.py
 test.py
-pca.npy
+test_time_series.py
+test_norm.py
+test_pca.py

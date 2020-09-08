@@ -6,18 +6,22 @@ import math
 import matplotlib.pyplot as plt
 import random
 import time
+import cv2
 from os import listdir, path
 from scipy.fftpack import fft, dct, idct
+from sklearn.metrics import mean_squared_error
+from skimage.metrics import structural_similarity as ssim
+
 
 # Timer
-start_time = time.time()
+curr_time = time.time()
 
 def NetworkInitialization(inSize, resSize, rho, dens, shift, topology, control):
     # Win = np.zeros(shape=(numParticles,resSize, 1 + inSize))
     Win = np.random.rand(resSize, 1 + inSize) - shift
     if control == 0:
         if topology == 0:  # classic ESN, full connected
-            W = np.random.rand(resSize, resSize) - shiftr
+            W = np.random.rand(resSize, resSize) - shift
 
         elif topology == 1:  # classic ESN with dens density
             print("Topo 1")
@@ -90,10 +94,8 @@ def ESNmodel(ESNparam, ConfigLearning, data):
     leaky = ESNparam[3]  # leaking rate
     reg = ESNparam[4]
     shift = ESNparam[5]  # the weights are scaled in [-shift,shift]
-    # 0 (ESN full connected), 1 (ESN sparse), 2 (DLR), 3 (SCR)
-    topology = ESNparam[6]
-    # 0 (ESN with neuron leaky), 1 ESN (with reservoir leaky), 2 (ESN with noise)
-    ESNtype = ESNparam[7]
+    topology = ESNparam[6]  # 0 (ESN full connected), 1 (ESN sparse), 2 (DLR), 3 (SCR)
+    ESNtype = ESNparam[7]   # 0 (ESN with neuron leaky), 1 ESN (with reservoir leaky), 2 (ESN with noise)
     noise = np.exp(-15)
     #################
     # Config learning
@@ -112,8 +114,7 @@ def ESNmodel(ESNparam, ConfigLearning, data):
     # Network initialization
     #################
     control = 1
-    weights = NetworkInitialization(
-        inSize, resSize, rho, dens, shift, topology, control)
+    weights = NetworkInitialization(inSize, resSize, rho, dens, shift, topology, control)
     Win = weights[0]
     W = weights[1]
     # x state, evaluate each particle in a small batch.
@@ -125,15 +126,12 @@ def ESNmodel(ESNparam, ConfigLearning, data):
         u = data[t]  # input pattern
         # compute state.
         if ESNtype == 0:
-            x = (1 - leaky) * x + leaky * \
-                np.tanh(np.dot(Win, np.vstack((1, u))) + np.dot(W, x))
+            x = (1 - leaky) * x + leaky * np.tanh(np.dot(Win, np.vstack((1, u))) + np.dot(W,x))
         elif ESNtype == 1:
-            x = (1 - leaky) * x + np.tanh(np.dot(Win,
-                np.vstack((1, u))) + leaky * np.dot(W, x))
+            x = (1 - leaky) * x + np.tanh(np.dot(Win,np.vstack((1, u))) + leaky * np.dot(W, x))
         else:
-            aux = leaky * np.dot(W, x)[:, 0]+noise*np.random.rand(1, resSize)
-            x = (1 - leaky) * x + \
-                np.tanh(np.dot(Win, np.vstack((1, u)))+aux.transpose())
+            aux = leaky * np.dot(W, x)[:, 0] + noise*np.random.rand(1, resSize)
+            x = (1 - leaky) * x + np.tanh(np.dot(Win, np.vstack((1, u)))+aux.transpose())
 
         # store state in large matrix of states
         X[:, t] = np.vstack((1, u, x))[:, 0]
@@ -144,35 +142,60 @@ def ESNmodel(ESNparam, ConfigLearning, data):
      # to test over data in range test
      # run the trained ESN in a generative mode. no need to initialize here,
      # because x is initialized with training data and we continue from there.
+    # X_train = x
 
     Ytest = data[None, trainEnd:(trainEnd + testLen)]
     pred = np.zeros(shape=(1, testLen))
     u = data[initialTest]
     for t in list(range(testLen)):
+        # generative mode
+        if learningMode == 0:  
+            # generative mode:
+            if t != 0:
+                u = y
+        # this would be a predictive mode:
+        else:
+            u = data[initialTest + t]
+
         # compute state.
         if ESNtype == 0:
-            x = (1 - leaky) * x + leaky * \
-                np.tanh(np.dot(Win, np.vstack((1, u))) + np.dot(W, x))
+            x = (1 - leaky) * x + leaky * np.tanh(np.dot(Win, np.vstack((1, u))) + np.dot(W, x))
         elif ESNtype == 1:
-            x = (1 - leaky) * x + np.tanh(np.dot(Win,
-                np.vstack((1, u))) + leaky * np.dot(W, x))
+            x = (1 - leaky) * x + np.tanh(np.dot(Win,np.vstack((1, u))) + leaky * np.dot(W, x))
         else:
-            aux = leaky * np.dot(W, x)[:, 0]+noise*np.random.rand(1, resSize)
-            x = (1 - leaky) * x + \
-                np.tanh(np.dot(Win, np.vstack((1, u)))+aux.transpose())
+            aux = leaky * np.dot(W, x)[:, 0] + noise*np.random.rand(1, resSize)
+            x = (1 - leaky) * x + np.tanh(np.dot(Win, np.vstack((1, u)))+aux.transpose())
 
         y = np.dot(Wout, np.vstack((1, u, x)))
-        pred[0, t] = y
-    if learningMode == 0:  # generative mode
-        # generative mode:
-        u = y
-        # this would be a predictive mode:
-    else:
-        u = data[initialTest + t]
 
-    res = [Win, W, Wout, pred]
+        pred[0, t] = y
+
+    res = [Win, W, Wout, pred, x]
     return res
 
+# # Custom predict
+# def pred_new_img(ESNparam, W_param, x, y):
+#     leaky = ESNparam[3]  # leaking rate
+#     ESNtype = ESNparam[7]
+#     Win = W_param[0]
+#     W = W_param[1]
+#     Wout = W_param[2]
+
+#     pred = np.zeros(shape=(1, 1))
+#     u = y
+
+#     if ESNtype == 0:
+#         x = (1 - leaky) * x + leaky * np.tanh(np.dot(Win, np.vstack((1, u))) + np.dot(W, x))
+#     elif ESNtype == 1:
+#         x = (1 - leaky) * x + np.tanh(np.dot(Win,np.vstack((1, u))) + leaky * np.dot(W, x))
+#     else:
+#         aux = leaky * np.dot(W, x)[:, 0] + noise*np.random.rand(1, resSize)
+#         x = (1 - leaky) * x + np.tanh(np.dot(Win, np.vstack((1, u)))+aux.transpose())
+
+#     y = np.dot(Wout, np.vstack((1, u, x)))
+#     pred[0, 0] = y
+#     res = [pred, x]
+#     return res
 
 #####
 my_dir = dir()  # Define a variable which holds all variables before you start programming
@@ -186,19 +209,20 @@ np.random.seed(2)  # seed random number generator
 #################
 #  Reservoir metaparameters
 #################
-ESNparam = [100, 1.2, 0.9, 0.3, 1e-8, 0.5, 0,0]  # [resSize, rho, dens, leaky, regularization parameter, weightshift, topology]
+ESNparam = [100, 0.1, 0.9, 0.5, 1e-6, 0.5, 0, 0]  # [resSize, rho, dens, leaky, regularization parameter, weightshift, topology]
+# [100, 1, 0.9, 0.5, 1e-8, 0.5, 0, 1]
 #################
 # Config learning
 #################
-trainInit= 20  # from what point starts the training
-trainEnd= 300
-testLen= 6
-inSize= outSize = 1
-initialTest= trainEnd
-learningMode= 0  # generative mode
-timeAhead= 1
-ConfigLearning= [trainInit, trainEnd, testLen, learningMode, timeAhead]
-K= 50
+trainInit = 20  # from what point starts the training
+trainEnd = 331
+testLen = 10
+inSize = outSize = 1
+initialTest = trainEnd
+learningMode = 1  # generative mode
+timeAhead = 1
+ConfigLearning = [trainInit, trainEnd, testLen, learningMode, timeAhead]
+K = 50
 
 # # pred = np.zeros(shape=(K, testLen))
 # predESNRhoO5 = np.zeros(shape=(3, testLen))
@@ -213,21 +237,83 @@ K= 50
 # #####################
 
 # Minh matrix contains the file that you sent me by
-root_dir = path.dirname(path.dirname(path.abspath(__file__)))
-curr_path = path.dirname(__file__)
+curr_dir = path.dirname(__file__)
+root_dir = path.dirname(curr_dir)
 
-pca_matrix=np.load(path.join(root_dir, 'data', 'pca.npy'))
-pca_elements=pca_matrix.shape[0] # your file with the time series.
-predOz=np.zeros(shape=(pca_elements,testLen)) # predOz will have the predicted values
-for i in range(pca_elements):
-    data=pca_matrix[i,:]
+# North prediction
+north_matrix = np.load(path.join(root_dir, 'data', 'reconstructed_gray', 'north', 'gray_north.npy'))
+pixel_num = north_matrix.shape[0] # your file with the time series.
+pred_gray_north = np.zeros(shape=(pixel_num, testLen)) # pred_gray_north will have the predicted values
+# total_resESN = []
+
+# Train image
+for i in range(pixel_num):
+    data = north_matrix[i,:]
     resESN = ESNmodel(ESNparam, ConfigLearning, data)
-    predOz[i, :] = resESN[3]
-    print('Iteration',i)
+    pred_gray_north[i, :] = resESN[3]
+    # total_resESN.append(resESN)
+    print('Pixel',i,'/',pixel_num)
 
-predOz = np.asarray(predOz)
-print(predOz)
+pred_gray_north = np.asarray(pred_gray_north)
+# total_resESN = np.asarray(total_resESN)
 
-np.save(path.join(curr_path, 'pca_pred'), predOz)
+# # Predict custom image
+# new_img = np.zeros(shape=(pixel_num, 1))
+# for i in range(pixel_num):
+#     resESN = total_resESN[i]
+#     W_param = [resESN[0], resESN[1], resESN[2]]
+#     pixel_temp = north_matrix[i,:]
+#     new_pixel = pred_new_img(ESNparam, W_param, resESN[4], pixel_temp[305])
+#     new_img[i,:] = new_pixel[0]
+#     print('Pixel',i,'/',pixel_num)
 
-print('Time: %s seconds.' % (time.time() - start_time))
+pred_gray_north = pred_gray_north.transpose().reshape(testLen, 64, 512)
+for i in range(pred_gray_north.shape[0]):
+    temp = pred_gray_north[i] * 255
+    name = str(i) + '.png'
+    cv2.imwrite(path.join(curr_dir, 'test_pred_gray', 'north', name), temp)
+
+# new_img = new_img.transpose().reshape(1, 64, 512)
+# new_img = new_img * 255
+# new_img_name = 'new.png'
+# cv2.imwrite(path.join(curr_dir, 'pred_gray', new_img_name), new_img[0])
+
+
+""" # South prediction
+south_matrix = np.load(path.join(root_dir, 'data', 'reconstructed_gray', 'south', 'gray_south.npy'))
+pixel_num = south_matrix.shape[0] # your file with the time series.
+pred_gray_south = np.zeros(shape=(pixel_num, testLen)) # pred_gray_south will have the predicted values
+for i in range(pixel_num):
+    data = south_matrix[i,:]
+    resESN = ESNmodel(ESNparam, ConfigLearning, data)
+    pred_gray_south[i, :] = resESN[3]
+    print('Pixel',i,'/',pixel_num)
+
+pred_gray_south = np.asarray(pred_gray_south)
+
+
+pred_gray_south = pred_gray_south.transpose().reshape(testLen, 64, 512)
+
+for i in range(pred_gray_south.shape[0]):
+    temp = pred_gray_south[i] * 255
+
+    name = str(i) + '.png'
+    cv2.imwrite(path.join(curr_dir, 'test_pred_gray', 'south', name), temp) """
+
+##############################################
+# Calculating RMSE
+for i in range(pred_gray_north.shape[0]):
+    real = north_matrix[:,(342 - testLen + i)].transpose() * 255
+    pred = pred_gray_north[i].flatten() * 255
+    testScore_RMSE = mean_squared_error(real, pred, squared = False)
+
+    real = real.reshape(64,512)
+    pred = pred.reshape(64,512)
+    testScore_SSIM = ssim(real, pred, data_range = (pred.max() - pred.min()))
+
+    print('RMSE',(i+1),'=',testScore_RMSE)
+    print('SSIM',(i+1),'=',testScore_SSIM)
+    
+
+curr_time = time.time() - curr_time
+print('Time: %s seconds.' % (curr_time))
